@@ -34,7 +34,9 @@ package xml;
 import java.io.*;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 
 import javax.xml.parsers.*;
 import org.xml.sax.*;
@@ -51,17 +53,20 @@ public class Parser {
 	int line = 0;
 	PreparedStatement stmt_inproc, stmt_conf, stmt_author, stmt_cite;
 	int errors = 0;
-	StringBuffer author;
+//	StringBuffer author;
+	Author author;
+	int authorRankCounter = 0;
+	int paperCount = 0;
 	
 	private class ConfigHandler extends DefaultHandler {
 		public void startElement(String namespaceURI, String localName,
 				String rawName, Attributes atts) throws SAXException {
-			System.out.println("rawName: "+rawName + "localName: "+ localName);
 			if (rawName.equals("inproceedings")) {
 				ancestor = Element.INPROCEEDING;
 				curElement = Paper.INPROCEEDING;
 				paper = new Paper();
 				paper.key = atts.getValue("key");
+				authorRankCounter = 0;
 			} else if (rawName.equals("proceedings")) {
 				ancestor = Element.PROCEEDING;
 				curElement = Conference.PROCEEDING;
@@ -70,7 +75,8 @@ public class Parser {
 			} else if (rawName.equals("author") && ancestor == Element.INPROCEEDING) {
 				//create author id
 				//our author can have multiple names which we will map corresponding to the alias ID
-				author = new StringBuffer();
+				author = new Author();
+				author.rank = ++authorRankCounter;
 			}
 
 			if (ancestor == Element.INPROCEEDING) {
@@ -92,7 +98,7 @@ public class Parser {
 			if (ancestor == Element.INPROCEEDING) {
 				String str = new String(ch, start, length).trim();
 				if (curElement == Paper.AUTHOR) {
-					author.append(str);
+					author.name.append(str);
 				} else if (curElement == Paper.CITE) {
 					paper.citations.add(str);
 				} else if (curElement == Paper.CONFERENCE) {
@@ -115,7 +121,7 @@ public class Parser {
 		public void endElement(String namespaceURI, String localName,
 				String rawName) throws SAXException {
 			if (rawName.equals("author") && ancestor == Element.INPROCEEDING) {
-				paper.authors.add(author.toString().trim());
+				paper.authors.add(author);
 			}
 			
 			if (Element.getElement(rawName) == Element.INPROCEEDING) {
@@ -127,15 +133,19 @@ public class Parser {
 						errors++;
 						return;
 					}
-					stmt_inproc.setString(1, paper.title);
-					stmt_inproc.setInt(2, paper.year);
-					stmt_inproc.setString(3, paper.conference);
-					stmt_inproc.setString(4, paper.key);
+					
+					stmt_inproc.setInt(1, ++paperCount);
+					stmt_inproc.setString(2, paper.title);
+					stmt_inproc.setInt(3, paper.year);
+					stmt_inproc.setString(4, paper.conference);
+					stmt_inproc.setString(5, paper.key);
 					stmt_inproc.addBatch();
 
-					for (String author: paper.authors) {
-						stmt_author.setString(1, author); 
+					for (Author author: paper.authors) {
+						stmt_author.setString(1, author.name.toString().trim()); 
 						stmt_author.setString(2, paper.key);
+						stmt_author.setInt(3, paperCount);
+						stmt_author.setInt(4, author.rank);
 						stmt_author.addBatch();
 					}
 					for (String cited: paper.citations) {
@@ -213,10 +223,10 @@ public class Parser {
 			conn = DBConnection.getConn();
 			conn.setAutoCommit(false);
 			stmt_inproc = conn
-					.prepareStatement("insert into paper(title,year,conference,paper_key) values (?,?,?,?)");
+					.prepareStatement("insert into paper(id,title,year,conference,paper_key) values (?,?,?,?,?)", Statement.RETURN_GENERATED_KEYS);
 
 			stmt_author = conn
-					.prepareStatement("insert into author(name,paper_key) values (?,?)");
+					.prepareStatement("insert into author(name,paper_key,paper_id,author_rank) values (?,?,?,?)");
 
 			stmt_cite = conn
 					.prepareStatement("insert into citation(paper_cite_key,paper_cited_key) values (?,?)");

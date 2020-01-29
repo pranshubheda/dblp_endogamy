@@ -2,7 +2,9 @@ package xml;
 
 import java.io.File;
 import java.io.IOException;
-import java.util.ArrayList;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.SQLException;
 
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
@@ -12,13 +14,17 @@ import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
+import db.DBConnection;
+
 public class DblpParserWWW {
-	
 	private int ancestor = -1;
 	private int currElement = -1;
 	StringBuffer author;
 	int overallAuthorCount = 0;
 	int authorIdCounter = -1;
+	private Connection conn;
+	PreparedStatement stmt_person;
+	int line = 0;
 	
 	private class ConfigHandler extends DefaultHandler {
 		
@@ -37,6 +43,7 @@ public class DblpParserWWW {
 				author = new StringBuffer();
 				currElement = 2;
 			}
+			line++;
 		}
 		
 		public void characters(char[] ch, int start, int length)
@@ -52,32 +59,67 @@ public class DblpParserWWW {
 		public void endElement(String namespaceURI, String localName,
 				String rawName) throws SAXException {
 			if (ancestor == 2 && rawName.equals("author")) {
-				System.out.printf("AliasID: %s Id: %d Name: %s \n", ++overallAuthorCount, ++authorIdCounter, author.toString().trim());
+//				System.out.printf("AliasID: %s Id: %d Name: %s \n", ++overallAuthorCount, ++authorIdCounter, author.toString().trim());
+				try {
+					stmt_person.setInt(1, ++overallAuthorCount);
+					stmt_person.setInt(2, ++authorIdCounter);
+					int primaryAlias = overallAuthorCount; 
+					if (authorIdCounter > 1) {
+						primaryAlias = overallAuthorCount-authorIdCounter+1;
+					}
+					stmt_person.setInt(3, primaryAlias);
+					stmt_person.setString(4, author.toString());
+					stmt_person.addBatch();
+				} catch (SQLException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
+				}
+
 			}
 			if(rawName.equals("www")) {
 				ancestor = -1;
+			}
+			
+			if (line % 10000 == 0) {
+				try {
+					stmt_person.executeBatch();
+					conn.commit();
+				} catch (SQLException e) {
+					System.err.println(e.getMessage());
+				}
 			}
 		}
 		
 	}
 	
-	public DblpParserWWW(String filePath) throws ParserConfigurationException, SAXException, IOException {
+	public DblpParserWWW(String filePath) throws ParserConfigurationException, SAXException, IOException, SQLException {
+		conn = DBConnection.getConn();
+		conn.setAutoCommit(false);
+		stmt_person = conn
+				.prepareStatement("insert into person(id,priority,primary_alias,name) values (?,?,?,?)");
+		
 		SAXParserFactory parserFactory = SAXParserFactory.newInstance();
 		SAXParser parser = parserFactory.newSAXParser();
 		ConfigHandler handler = new ConfigHandler();
 		parser.getXMLReader().setFeature(
 				"http://xml.org/sax/features/validation", true);
 		parser.parse(new File(filePath), handler);
-	
+		try {
+			stmt_person.executeBatch();
+			conn.commit();
+		} catch (SQLException e) {
+			e.printStackTrace();
+		}
+		conn.close();
 	}
 
-	public static void main(String[] args) throws ParserConfigurationException, SAXException, IOException {
+	public static void main(String[] args) throws ParserConfigurationException, SAXException, IOException, SQLException {
+		System.setProperty("entityExpansionLimit", "2000000");
 		Long start = System.currentTimeMillis();
-		String filePath = "C:\\Users\\prans\\Documents\\capstone\\dblp_dataset\\www_test.xml";
+		String filePath = "C:\\Users\\prans\\Documents\\capstone\\dblp_dataset\\dblp.xml";
 		DblpParserWWW p = new DblpParserWWW(filePath);
 		Long end = System.currentTimeMillis();
 		System.out.println("Used: " + (end - start) / 1000 + " seconds");
-		
 	}
 
 }

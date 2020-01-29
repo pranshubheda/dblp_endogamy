@@ -7,7 +7,8 @@ public class Paper {
 	public String title;
 	public int year;
 	public String conference;
-	public ArrayList<String> authors;
+//	public ArrayList<String> authors;
+	public ArrayList<Author> authors;
 	public ArrayList<String> citations;
 
 	public static final int OTHER = 0;
@@ -63,7 +64,7 @@ public class Paper {
 		title = "";
 		conference = "";
 		year = 0;
-		authors = new ArrayList<String>();
+		authors = new ArrayList<Author>();
 		citations = new ArrayList<String>();
 	}
 }
