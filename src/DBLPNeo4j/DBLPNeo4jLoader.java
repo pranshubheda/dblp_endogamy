@@ -57,7 +57,9 @@ public class DBLPNeo4jLoader {
 		while(fetchPaperRS.next()) {
 			HashMap<String, Object> paperAttributes = new HashMap<>();
 			int paperId = fetchPaperRS.getInt("id");
+			int year = fetchPaperRS.getInt("year");
 			paperAttributes.put("paper_key", fetchPaperRS.getString("paper_key"));
+			paperAttributes.put("year", fetchPaperRS.getInt("year"));
 			inserter.createNode(paperId, paperAttributes, Label.label("Paper"));
 		}
 
@@ -73,7 +75,7 @@ public class DBLPNeo4jLoader {
 
 		Connection conn = DBConnection.getConn();
 		String fetchPersonSql = ""
-				+ "select distinct primary_alias "
+				+ "select distinct primary_alias  "
 				+ "from person;";
 		PreparedStatement fetchPersonPS = conn.prepareStatement(fetchPersonSql);
 		ResultSet fetchPersonRS = fetchPersonPS.executeQuery();
@@ -118,7 +120,37 @@ public class DBLPNeo4jLoader {
 			}
 		}		
 	}
-	
+
+	private static void updatePersonNodes() throws SQLException {
+		long startTime = System.nanoTime();
+		System.out.println("Started fetching person");
+
+		Connection conn = DBConnection.getConn();
+		
+		String fetchPersonSql = ""
+				+ "select p1.id as primary_alias, p1.name as primary_alias_name "
+				+ "from person p1 "
+				+ "where p1.id = p1.primary_alias;";
+		
+		PreparedStatement fetchPersonPS = conn.prepareStatement(fetchPersonSql);
+		ResultSet fetchPersonRS = fetchPersonPS.executeQuery();
+		
+		long endTime = System.nanoTime();
+		System.out.println("Finished fetching person in "+ (endTime-startTime)/(60 * Math.pow(10, 9)) +" min");	
+		
+		startTime = System.nanoTime();
+		System.out.println("Started updating person");
+		while(fetchPersonRS.next()) {
+			HashMap<String, Object> personAttributes = new HashMap<>();
+			int personId = personCounterSeed + fetchPersonRS.getInt("primary_alias");
+			inserter.setNodeProperty(personId, "primary_alias_name", fetchPersonRS.getString("primary_alias_name"));
+		}
+
+		fetchPersonPS.close();
+		endTime = System.nanoTime();
+		System.out.println("Finished updating person in "+ (endTime-startTime)/(60 * Math.pow(10, 9)) +" min");
+	}
+
 	public static void queryNeo4j() {
 		long startTime = System.nanoTime();
 		try {
@@ -153,6 +185,7 @@ public class DBLPNeo4jLoader {
 //			migratePapersToNeo4j();
 //			migratePersonToNeo4j();
 //			createAuthorPaperRealtionship();
+//			updatePersonNodes();
 			queryNeo4j();
 			long endTime = System.nanoTime();
 			System.out.println("Finished migration in "+ (endTime-startTime)/(60 * Math.pow(10, 9)) +" min");
