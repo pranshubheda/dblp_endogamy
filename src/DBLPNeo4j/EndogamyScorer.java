@@ -7,6 +7,7 @@ import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -223,7 +224,8 @@ public class EndogamyScorer {
 				"where r.paper_key CONTAINS $conferenceAcronym " + 
 				"RETURN ID(r) as paperId;";
 		HashMap<String, Object> params = new HashMap();
-		params.put("conferenceAcronym", "/"+conferenceAcronym+"/");
+		conferenceAcronym = "/"+conferenceAcronym+"/";
+		params.put("conferenceAcronym", conferenceAcronym);
 		Result result = db.execute(findPapersOfConferenceQuery, params);
 		Long intersectionCount = null;
 		if(result.hasNext())
@@ -236,17 +238,15 @@ public class EndogamyScorer {
 		return paperIds;
 	}
 	
-	public static double findEndogamyScoreOfConference(String conferenceAcronym) {
+	public static double findEndogamyScoreOfConference(String conferenceAcronym, HashSet<Long> paperIds) {
 		double sumOfEndoScoreOfPapersPublished = 0;
-		//find papers in this conference
-		HashSet<Long> paperIds = findPapersOfConference(conferenceAcronym);
-		//for each paper find endogamy score
 		ArrayList<Long> ignoredPaperIds = new ArrayList();
 		for (Long paperId : paperIds) {
 			HashSet<Long> authors = findAuthors(paperId);
 			if (authors.size() <= 10) {
 				double endogamyScoreOfPaper = findEndogamyScoreOfPaper(paperId, authors);
 				sumOfEndoScoreOfPapersPublished += endogamyScoreOfPaper;				
+//				System.out.println("Checked paper id: "+paperId+" Score: "+endogamyScoreOfPaper);
 			}
 			else {
 				ignoredPaperIds.add(paperId);
@@ -273,39 +273,22 @@ public class EndogamyScorer {
 	
 	public static HashMap<String, Integer> getGroundTruthRankings() throws IOException{
 		HashMap<String, Integer> groundTruthConferenceRanks = new HashMap();
-		String cleanedCoreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/cleaned_core_rankings.csv";
+		String cleanedCoreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/cleaned_core_rankings_cs.csv";
         BufferedReader br = new BufferedReader(new FileReader(cleanedCoreRankingsFile));
         String rankingEntry = br.readLine();
         while(rankingEntry != null) {
         	String[] ranking = rankingEntry.split(",");
-        	int conferenceRank = Integer.parseInt(ranking[0]);
+//        	int conferenceRank = Integer.parseInt(ranking[0]);
+        	int conferenceRank = Integer.parseInt(ranking[3]);
         	String conferenceAcronym = ranking[2];
         	groundTruthConferenceRanks.put(conferenceAcronym, conferenceRank);
+        	rankingEntry = br.readLine();
         }
         return groundTruthConferenceRanks;
 	}
 
-//	public static Double getConformanceScoreOfGeneratedRankings(BidirectionalMap groundTruthConferenceRanks, HashMap<String, Double> generatedConferenceRanks) {
-//		int p = 0, f = 0;
-//		//for each combination check conditions and remember count
-//		for(int i=0; i<groundTruthConferenceRanks.size(); i++) {
-//			int conference1Rank = i+1;
-//			String conference1Acronym = (String) groundTruthConferenceRanks.get(conference1Rank);
-//			for(int j=i+1; j<groundTruthConferenceRanks.size()+1; j++) {
-//				int conference2Rank = j+1;
-//				String conference2Acronym = (String) groundTruthConferenceRanks.get(conference2Rank);
-//				if(generatedConferenceRanks.get(conference1Acronym) > generatedConferenceRanks.get(conference2Acronym))
-//					p++;
-//				else
-//					f++;
-//			}
-//		}
-//		
-//		double conformanceScore = 100 * (p/p+f);
-//		return conformanceScore;
-//	}
-	
 	public static Double getConformanceScoreOfGeneratedRankings(HashMap<String, Integer> groundTruthConferenceRanks, List<Entry<String, Double>> sortedConferenceScores) {
+		
 		int p = 0, f = 0;
 		//for each combination check conditions and remember count
 		for(int i=0; i<sortedConferenceScores.size(); i++) {
@@ -314,50 +297,96 @@ public class EndogamyScorer {
 			double conference1Score = conference1Entry.getValue();
 			int conference1Ranking = groundTruthConferenceRanks.get(conference1Acronym);
 			
-			for(int j=i+1; j<sortedConferenceScores.size()+1; j++) {
+			for(int j=i+1; j<sortedConferenceScores.size(); j++) {
 				Entry<String, Double> conference2Entry = sortedConferenceScores.get(j);
 				String conference2Acronym = conference2Entry.getKey();
 				double conference2Score = conference2Entry.getValue();
 				int conference2Ranking = groundTruthConferenceRanks.get(conference2Acronym);
-				System.out.printf("Comparing %s and %s \n", conference1Acronym, conference2Acronym);
-				System.out.printf("Score %s and %s \n", conference1Score, conference2Score);
-				System.out.printf("Ranking %s and %s \n", conference1Ranking, conference2Ranking);
+//				System.out.printf("Comparing %s and %s \n", conference1Acronym, conference2Acronym);
+//				System.out.printf("Score %s and %s \n", conference1Score, conference2Score);
+//				System.out.printf("Ranking %s and %s \n", conference1Ranking, conference2Ranking);
 				
-				if(conference1Ranking > conference2Ranking)
+				// rank 1 is actually bigger than rank 2
+				if(conference1Ranking <= conference2Ranking)
 					p++;
 				else
 					f++;
 			}
 		}
 		
-		double conformanceScore = 100 * (p/p+f);
+		double conformanceScore = 100 * ((p*1.0)/(p+f));
 		return conformanceScore;
 	}
 	
+	public static List<Entry<String, Double>> loadEndogamyScores() throws IOException {
+		List<Entry<String, Double>> loadedEndogamyScores = new ArrayList();
+		String cleanedCoreRankingsFile = "C:/Users/prans/Documents/capstone/endogamy_scores/cs_endogamy_scores.csv";
+        BufferedReader br = new BufferedReader(new FileReader(cleanedCoreRankingsFile));
+        String rankingEntry = br.readLine();
+        while(rankingEntry != null) {
+        	String[] ranking = rankingEntry.split(",");
+        	String conferenceAcronym = ranking[0];
+        	double endogamyScore = Double.parseDouble(ranking[1]);
+        	loadedEndogamyScores.add(Map.entry(conferenceAcronym, endogamyScore));
+        	rankingEntry = br.readLine();
+        }
+        return loadedEndogamyScores;
+	}
+	
+
+	private static void generateEndogamyScores(HashMap<String, Integer> groundTruthConferenceRanks)
+			throws FileNotFoundException {
+		//		String[] conferencesToCheck = {"pods", "isit", "edbt", "icde", "sigmod", "mdm", "asiacrypt", "dasfaa", "pakdd"};
+		//		String[] conferencesToCheck = {"pods", "isit", "edbt"};
+		//		String[] conferencesToCheck = {"wsdm"};
+		
+				Set<String> conferencesToCheckSet = groundTruthConferenceRanks.keySet();
+				String[] conferencesToCheck = (String[]) Arrays.copyOf(conferencesToCheckSet.toArray(), conferencesToCheckSet.size(), String[].class); 
+				int totalConferencesChecked = 0;
+				
+				HashMap<String, Double> generatedConferenceScores = new HashMap();
+				for (int i = 0; i < conferencesToCheck.length; i++) {
+					String conferenceAcronym = conferencesToCheck[i];
+					//find papers in this conference
+					HashSet<Long> paperIds = findPapersOfConference(conferenceAcronym);
+					if (paperIds.size() > 100) {
+						//for each paper find endogamy score
+						System.out.println(conferenceAcronym+" has "+paperIds.size()+" papers to check");
+						double endogamyScoreOfConference = findEndogamyScoreOfConference(conferenceAcronym, paperIds);
+						generatedConferenceScores.put(conferenceAcronym, endogamyScoreOfConference);	
+		//				System.out.println(conferenceAcronym+" : "+endogamyScoreOfConference);
+						totalConferencesChecked++;
+					}
+				}
+		
+				String outputEndogamyScores = "C:/Users/prans/Documents/capstone/endogamy_scores/cs_endogamy_scores.csv"; 
+				PrintWriter writer = new PrintWriter(new File(outputEndogamyScores));
+				
+				int flushCounter = 0;
+				List<Entry<String, Double>> sortedConferenceScores = sortMap(generatedConferenceScores);
+				for(Entry<String, Double> entry: sortedConferenceScores) {
+					System.out.printf("Conference: %s Score: %s \n", entry.getKey(), entry.getValue().toString());
+					writer.write(entry.getKey()+","+entry.getValue().toString()+"\n");
+					if(flushCounter>= 100)
+						writer.flush();
+				}
+				
+				writer.close();
+				System.out.println("Total conferences checked "+totalConferencesChecked );
+	}
+
 	public static void main(String[] args) throws IOException {
 		long startTime = System.nanoTime();
-//		String[] conferencesToCheck = {"pods", "isit", "edbt", "icde", "pkdd", "sigmod", "mdm", "asiacrypt", "dasfaa", "pakdd"};
-		String[] conferencesToCheck = {"pods", "isit", "edbt"};
-
 		HashMap<String, Integer> groundTruthConferenceRanks = getGroundTruthRankings();
 		
-		HashMap<String, Double> generatedConferenceScores = new HashMap();
-		for (int i = 0; i < conferencesToCheck.length; i++) {
-			String conferenceAcronym = conferencesToCheck[i];
-			double endogamyScoreOfConference = findEndogamyScoreOfConference(conferenceAcronym);
-			generatedConferenceScores.put(conferenceAcronym, endogamyScoreOfConference);	
-		}
-		
-		List<Entry<String, Double>> sortedConferenceScores = sortMap(generatedConferenceScores);
-		for(Entry<String, Double> entry: sortedConferenceScores) {
-			System.out.printf("Conference: %s Score: %s \n", entry.getKey(), entry.getValue().toString());
-		}
+//		generateEndogamyScores(groundTruthConferenceRanks);
+
+		List<Entry<String, Double>> sortedConferenceScores = loadEndogamyScores();
+		double conformanceScore = getConformanceScoreOfGeneratedRankings(groundTruthConferenceRanks, sortedConferenceScores);
+		System.out.println("Conformance Score: "+conformanceScore);
 		
 		long endTime = System.nanoTime();
 		System.out.println("Finished execution in " + (endTime-startTime)/(60 * Math.pow(10, 9)) +" min");
-		
-		double conformanceScore = getConformanceScoreOfGeneratedRankings(groundTruthConferenceRanks, sortedConferenceScores);
-		System.out.println("Conformance Score: "+conformanceScore);
 	}
 
 }

@@ -28,6 +28,7 @@ public class CleanRankingData {
 				"WHERE r.paper_key contains $conferenceAcronym " + 
 				"RETURN count(r) > 0 as acronym_exists";
 		HashMap<String, Object> params = new HashMap();
+		conferenceAcronym = "/"+conferenceAcronym+"/";
 		params.put("conferenceAcronym", conferenceAcronym);
 		Result result = db.execute(checkIfAcronymExistsQuery, params);
 
@@ -42,25 +43,31 @@ public class CleanRankingData {
 	
 	public static void main(String[] args) {
 		try {
-			String coreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/core_rankings.csv";
+			String coreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/core_rankings_cs.csv";
 			BufferedReader br = new BufferedReader(new FileReader(coreRankingsFile));
 			String rankingEntry = br.readLine();
 			ArrayList<String> conferenceAcronymsNotFound = new ArrayList();
 			int conferenceRankGenerated = 0;
 			
-			String matchingCoreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/cleaned_core_rankings.csv"; 
+			String matchingCoreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/cleaned_core_rankings_cs.csv"; 
 			PrintWriter writer = new PrintWriter(new File(matchingCoreRankingsFile));
+			int ctr = 0;
 			
 			while(rankingEntry != null) {
 				String[] ranking = rankingEntry.split(",");
 				int conferenceRank = Integer.parseInt(ranking[0]);
-				String conferenceAcronym = ranking[2];
+				String conferenceAcronym = ranking[1];
+				String conferenceGrade = ranking[2];
 				conferenceAcronym = conferenceAcronym.toLowerCase();
 				boolean acronymExists = checkIfConferenceAcronymMatches(conferenceAcronym);
 				if(acronymExists) {
 					//write to a new file
-					writer.write(++conferenceRankGenerated+","+conferenceRank+","+conferenceAcronym+"\n");
-					System.out.println(conferenceRankGenerated+","+conferenceRank+","+conferenceAcronym);
+					writer.write(++conferenceRankGenerated+","+conferenceRank+","+conferenceAcronym+","+conferenceGrade+"\n");
+					System.out.println(conferenceRankGenerated+","+conferenceRank+","+conferenceAcronym+","+conferenceGrade);
+					if(++ctr >= 100) {
+						writer.flush();
+						ctr =0;
+					}
 				}
 				else {
 					conferenceAcronymsNotFound.add(conferenceAcronym);
@@ -68,7 +75,7 @@ public class CleanRankingData {
 				rankingEntry = br.readLine();
 			}
 			writer.close();
-			System.out.println("Not Found \n "+conferenceAcronymsNotFound);
+			System.out.println("Not Found Count: "+conferenceAcronymsNotFound.size());
 			
 		} catch (Exception e) {		
 			e.printStackTrace();
