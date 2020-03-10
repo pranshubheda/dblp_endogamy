@@ -8,7 +8,9 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
 
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -41,41 +43,71 @@ public class CleanRankingData {
 		return conferenceAcronymMatches;
 	}
 	
+	public static boolean validateConferenceGrade(String grade) {
+		String[] validGrades = {"A*", "A", "B", "C"};
+		HashSet<String> setOfValidGrades = new HashSet<>(Arrays.asList(validGrades));
+		boolean valid = setOfValidGrades.contains(grade.strip());
+		return valid; 
+	}
+	
+	public static void validateMSARConferenceAcronyms() throws IOException {
+		String msarRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/MSAR/msar_dm.csv";
+		BufferedReader br = new BufferedReader(new FileReader(msarRankingsFile));
+		String rankingEntry = br.readLine();
+		while (rankingEntry!=null) {
+			String[] rankingData = rankingEntry.split(",");
+			String acronym = rankingData[2].strip().toLowerCase();
+			System.out.printf(acronym+" "+checkIfConferenceAcronymMatches(acronym)+"\n");
+			rankingEntry = br.readLine();
+		}
+
+	}
+	
 	public static void main(String[] args) {
 		try {
-			String coreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/core_rankings_cs.csv";
-			BufferedReader br = new BufferedReader(new FileReader(coreRankingsFile));
-			String rankingEntry = br.readLine();
-			ArrayList<String> conferenceAcronymsNotFound = new ArrayList();
-			int conferenceRankGenerated = 0;
+			validateMSARConferenceAcronyms();
 			
-			String matchingCoreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/cleaned_core_rankings_cs.csv"; 
-			PrintWriter writer = new PrintWriter(new File(matchingCoreRankingsFile));
-			int ctr = 0;
-			
-			while(rankingEntry != null) {
-				String[] ranking = rankingEntry.split(",");
-				int conferenceRank = Integer.parseInt(ranking[0]);
-				String conferenceAcronym = ranking[1];
-				String conferenceGrade = ranking[2];
-				conferenceAcronym = conferenceAcronym.toLowerCase();
-				boolean acronymExists = checkIfConferenceAcronymMatches(conferenceAcronym);
-				if(acronymExists) {
-					//write to a new file
-					writer.write(++conferenceRankGenerated+","+conferenceRank+","+conferenceAcronym+","+conferenceGrade+"\n");
-					System.out.println(conferenceRankGenerated+","+conferenceRank+","+conferenceAcronym+","+conferenceGrade);
-					if(++ctr >= 100) {
-						writer.flush();
-						ctr =0;
-					}
-				}
-				else {
-					conferenceAcronymsNotFound.add(conferenceAcronym);
-				}
-				rankingEntry = br.readLine();
-			}
-			writer.close();
-			System.out.println("Not Found Count: "+conferenceAcronymsNotFound.size());
+//			String coreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/core_rankings_0801.csv";
+//			BufferedReader br = new BufferedReader(new FileReader(coreRankingsFile));
+//			String rankingEntry = br.readLine();
+//			ArrayList<String> conferenceAcronymsNotFound = new ArrayList();
+//			int conferenceRankGenerated = 0;
+//			HashMap<String, Integer> numericGrade = new HashMap();
+//			numericGrade.put("A*", 1001);
+//			numericGrade.put("A", 1002);
+//			numericGrade.put("B", 1003);
+//			numericGrade.put("C", 1004);
+// 			
+//			String matchingCoreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/cleaned_core_rankings_0801.csv"; 
+//			PrintWriter writer = new PrintWriter(new File(matchingCoreRankingsFile));
+//			int ctr = 0;
+//			
+//			while(rankingEntry != null) {
+//				String[] ranking = rankingEntry.split(",");
+//				int conferenceRank = Integer.parseInt(ranking[0]);
+//				String conferenceAcronym = ranking[2];
+//				String conferenceGrade = ranking[4];
+//				System.out.println(conferenceRank);
+//				if (validateConferenceGrade(conferenceGrade)) {
+//					conferenceAcronym = conferenceAcronym.toLowerCase();
+//					boolean acronymExists = checkIfConferenceAcronymMatches(conferenceAcronym);
+//					if(acronymExists) {
+//						//write to a new file
+//						writer.write(++conferenceRankGenerated+","+conferenceRank+","+conferenceAcronym+","+numericGrade.get(conferenceGrade)+"\n");
+////						System.out.println(conferenceRankGenerated+","+conferenceRank+","+conferenceAcronym+","+numericGrade.get(conferenceGrade));
+//						if(++ctr >= 100) {
+//							writer.flush();
+//							ctr =0;
+//						}
+//					}
+//					else {
+//						conferenceAcronymsNotFound.add(conferenceAcronym);
+//					}
+//				}
+//				rankingEntry = br.readLine();
+//			}
+//			writer.close();
+//			System.out.println("Not Found Count: "+conferenceAcronymsNotFound.size());
 			
 		} catch (Exception e) {		
 			e.printStackTrace();

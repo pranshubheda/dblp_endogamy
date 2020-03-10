@@ -238,12 +238,64 @@ public class EndogamyScorer {
 		return paperIds;
 	}
 	
+	public static HashSet<Long> findPapersOfAuthor(long authorId) {
+		HashSet<Long> paperIds = null;
+		String findPapersOfAuthorQuery = 
+				"MATCH (p:Person)-[q:HasAuthored]-(r:Paper) " + 
+				"where id(p) = $authorId " + 
+				"RETURN ID(r) as paperId;";
+		HashMap<String, Object> params = new HashMap();
+		params.put("authorId", authorId);
+		Result result = db.execute(findPapersOfAuthorQuery, params);
+		Long intersectionCount = null;
+		if(result.hasNext())
+			paperIds = new HashSet();
+		while(result.hasNext()) {
+			Map<String, Object> row = result.next();
+			long paperId = (Long)row.get("paperId");
+			paperIds.add(paperId);
+		}
+		return paperIds;
+	}
+	
+	public static HashSet<Long> findSeniorAuthors(long paperId, long skipCount) {
+		HashSet<Long> seniorAuthors = null;
+		try {
+			try ( Transaction tx = db.beginTx()){
+				String query = 
+						"MATCH (author:Person)-[q:HasAuthored]-(paper:Paper) " + 
+						"WHERE ID(paper) = $paperId " + 
+						"RETURN ID(author) as author_id " +
+						"ORDER BY q.rank;";
+				HashMap<String, Object> params = new HashMap();
+				params.put("paperId", paperId);
+				Result result = db.execute(query, params);
+				seniorAuthors = new HashSet<Long>();
+				while(result.hasNext()) {
+					Map<String, Object> row = result.next();
+					if(skipCount > 0) {
+						skipCount--;
+					}
+					else {
+						Long authorId = (Long)row.get("author_id");
+						seniorAuthors.add(authorId);
+					}
+				}
+			}			
+		} catch (Exception e) {		
+			e.printStackTrace();
+		}
+		return seniorAuthors;
+	}
+	
 	public static double findEndogamyScoreOfConference(String conferenceAcronym, HashSet<Long> paperIds) {
 		double sumOfEndoScoreOfPapersPublished = 0;
 		ArrayList<Long> ignoredPaperIds = new ArrayList();
 		for (Long paperId : paperIds) {
 			HashSet<Long> authors = findAuthors(paperId);
 			if (authors.size() <= 10) {
+				long skipCount = (long) (authors.size() * 0.2);
+				authors = findSeniorAuthors(paperId, skipCount);
 				double endogamyScoreOfPaper = findEndogamyScoreOfPaper(paperId, authors);
 				sumOfEndoScoreOfPapersPublished += endogamyScoreOfPaper;				
 //				System.out.println("Checked paper id: "+paperId+" Score: "+endogamyScoreOfPaper);
@@ -273,14 +325,15 @@ public class EndogamyScorer {
 	
 	public static HashMap<String, Integer> getGroundTruthRankings() throws IOException{
 		HashMap<String, Integer> groundTruthConferenceRanks = new HashMap();
-		String cleanedCoreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/cleaned_core_rankings_cs.csv";
+//		String cleanedCoreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/CORE/cleaned_core_rankings_0804.csv";
+		String cleanedCoreRankingsFile = "C:/Users/prans/Documents/capstone/ground_truth_rankings/MSAR/msar_db.csv";
+
         BufferedReader br = new BufferedReader(new FileReader(cleanedCoreRankingsFile));
         String rankingEntry = br.readLine();
         while(rankingEntry != null) {
         	String[] ranking = rankingEntry.split(",");
-//        	int conferenceRank = Integer.parseInt(ranking[0]);
-        	int conferenceRank = Integer.parseInt(ranking[3]);
         	String conferenceAcronym = ranking[2];
+        	int conferenceRank = Integer.parseInt(ranking[3]);
         	groundTruthConferenceRanks.put(conferenceAcronym, conferenceRank);
         	rankingEntry = br.readLine();
         }
@@ -320,7 +373,7 @@ public class EndogamyScorer {
 	
 	public static List<Entry<String, Double>> loadEndogamyScores() throws IOException {
 		List<Entry<String, Double>> loadedEndogamyScores = new ArrayList();
-		String cleanedCoreRankingsFile = "C:/Users/prans/Documents/capstone/endogamy_scores/cs_endogamy_scores.csv";
+		String cleanedCoreRankingsFile = "C:/Users/prans/Documents/capstone/endogamy_scores/descending/senior_cs_endogamy_scores_msar_db_0.2.csv";
         BufferedReader br = new BufferedReader(new FileReader(cleanedCoreRankingsFile));
         String rankingEntry = br.readLine();
         while(rankingEntry != null) {
@@ -333,11 +386,12 @@ public class EndogamyScorer {
         return loadedEndogamyScores;
 	}
 	
+	
 
-	private static void generateEndogamyScores(HashMap<String, Integer> groundTruthConferenceRanks)
+	private static List<Entry<String, Double>> generateEndogamyScores(HashMap<String, Integer> groundTruthConferenceRanks)
 			throws FileNotFoundException {
 		//		String[] conferencesToCheck = {"pods", "isit", "edbt", "icde", "sigmod", "mdm", "asiacrypt", "dasfaa", "pakdd"};
-		//		String[] conferencesToCheck = {"pods", "isit", "edbt"};
+//				String[] conferencesToCheck = {"pods", "isit", "edbt"};
 		//		String[] conferencesToCheck = {"wsdm"};
 		
 				Set<String> conferencesToCheckSet = groundTruthConferenceRanks.keySet();
@@ -359,7 +413,7 @@ public class EndogamyScorer {
 					}
 				}
 		
-				String outputEndogamyScores = "C:/Users/prans/Documents/capstone/endogamy_scores/cs_endogamy_scores.csv"; 
+				String outputEndogamyScores = "C:/Users/prans/Documents/capstone/endogamy_scores/descending/senior_cs_endogamy_scores_msar_db_0.2.csv"; 
 				PrintWriter writer = new PrintWriter(new File(outputEndogamyScores));
 				
 				int flushCounter = 0;
@@ -373,17 +427,52 @@ public class EndogamyScorer {
 				
 				writer.close();
 				System.out.println("Total conferences checked "+totalConferencesChecked );
+				return sortedConferenceScores;
+	}
+	
+	public static double generateEndogamyScoreOfAuthor(long authorId) {
+		double sumOfEndoScoreOfPapersPublished = 0;
+		double generatedEndogamyScore = 0.0;
+		HashSet<Long> paperIds = findPapersOfAuthor(authorId);
+		for (Long paperId : paperIds) {
+			HashSet<Long> authors = findAuthors(paperId);
+			if (authors.size() <= 10) {
+				long skipCount = (long) (authors.size() * 0.2);
+				authors = findSeniorAuthors(paperId, skipCount);
+				double endogamyScoreOfPaper = findEndogamyScoreOfPaper(paperId, authors);
+				sumOfEndoScoreOfPapersPublished += endogamyScoreOfPaper;				
+//				System.out.println("Checked paper id: "+paperId+" Score: "+endogamyScoreOfPaper);
+			}
+		}
+		generatedEndogamyScore = sumOfEndoScoreOfPapersPublished/paperIds.size();
+		return generatedEndogamyScore;
 	}
 
 	public static void main(String[] args) throws IOException {
 		long startTime = System.nanoTime();
-		HashMap<String, Integer> groundTruthConferenceRanks = getGroundTruthRankings();
 		
-//		generateEndogamyScores(groundTruthConferenceRanks);
-
-		List<Entry<String, Double>> sortedConferenceScores = loadEndogamyScores();
-		double conformanceScore = getConformanceScoreOfGeneratedRankings(groundTruthConferenceRanks, sortedConferenceScores);
-		System.out.println("Conformance Score: "+conformanceScore);
+//		HashMap<String, Integer> groundTruthConferenceRanks = getGroundTruthRankings();
+		
+//		List<Entry<String, Double>> sortedConferenceScores = generateEndogamyScores(groundTruthConferenceRanks);
+//		List<Entry<String, Double>> sortedConferenceScores = loadEndogamyScores();
+		
+//		double conformanceScore = getConformanceScoreOfGeneratedRankings(groundTruthConferenceRanks, sortedConferenceScores);
+//		System.out.println("Conformance Score: "+conformanceScore);
+		
+		double endogamyScoreOfAuthor = generateEndogamyScoreOfAuthor(25033715);
+		System.out.println(endogamyScoreOfAuthor);
+		endogamyScoreOfAuthor = generateEndogamyScoreOfAuthor(27168361);
+		System.out.println(endogamyScoreOfAuthor);
+		endogamyScoreOfAuthor = generateEndogamyScoreOfAuthor(27411083);
+		System.out.println(endogamyScoreOfAuthor);
+		endogamyScoreOfAuthor = generateEndogamyScoreOfAuthor(25531021);
+		System.out.println(endogamyScoreOfAuthor);
+		endogamyScoreOfAuthor = generateEndogamyScoreOfAuthor(25362641);
+		System.out.println(endogamyScoreOfAuthor);
+		endogamyScoreOfAuthor = generateEndogamyScoreOfAuthor(27065238);
+		System.out.println(endogamyScoreOfAuthor);
+		endogamyScoreOfAuthor = generateEndogamyScoreOfAuthor(25622261);
+		System.out.println(endogamyScoreOfAuthor);
 		
 		long endTime = System.nanoTime();
 		System.out.println("Finished execution in " + (endTime-startTime)/(60 * Math.pow(10, 9)) +" min");
