@@ -1,32 +1,6 @@
-/*
- * This program aims to parse dblp.xml using sax and store the data into mysql database.
+/**
+ * Base code for xml parser from :- https://github.com/kite1988/dblp-parser
  * 
- * Note: 
- * 1. Only <inproceedings> and its children are the interested elements, and 
- * other elements will be ignored.
- * 
- * 2. Authors, conference, papers, and the citations under <inproceedings> 
- * will be extracted and stored to the database. See dblp.sql for the database schema.
- * 
- * 
- * To know more about the xmlParser structure of dblp, you may read:
- * 
- *  1. My previous Chinese article posted in CSDN blog. 
- *     http://blog.csdn.net/kite1988/article/details/5186628
- *     
- * 	2. DBLP — Some Lessons Learned, authored by Michael Ley.
- *     http://dblp.uni-trier.de/xmlParser/docu/dblpxml.pdf
- *     
- *  3. DBLP XML DTD
- *     http://dblp.uni-trier.de/xmlParser/dblp.dtd
- *  
- *  This code was first written by me in early 2010 for my undergraduate thesis, and then
- *  was slightly modified in September 2013. I will keep this project updated, and make it
- *  a better one.
- *  
- *  If you have any questions/comments, feel free to drop me an email.
- *  Tao Chen (chentaokite AT gmail dot com)
- *  
  */
 
 package xmlParser;
