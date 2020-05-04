@@ -1,0 +1,5 @@
+match (p:author) 
+with p, size((p)-[:co_authored]-()) as degree   
+where degree > 0
+return id(p) as id, degree
+order by degree desc;

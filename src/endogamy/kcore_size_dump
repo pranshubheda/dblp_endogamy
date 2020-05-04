@@ -1,0 +1,5 @@
+match (p:author) 
+with p.kClass as kClass, count(*) as size   
+where kClass >= 1
+return kClass, size
+order by kClass desc;
